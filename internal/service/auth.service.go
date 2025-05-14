@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type IAuthService interface {
@@ -25,6 +26,7 @@ type IAuthService interface {
 	Login(ctx context.Context, request *auth.LoginRequest) (*auth.LoginResponse, error)
 	Logout(ctx context.Context, request *auth.LogoutRequest) (*auth.LogoutResponse, error)
 	ChangePassword(ctx context.Context, request *auth.ChangePasswordRequest) (*auth.ChangePasswordResponse, error)
+	GetProfile(ctx context.Context, request *auth.GetProfileRequest) (*auth.GetProfileResponse, error)
 }
 
 type authService struct {
@@ -132,7 +134,7 @@ func (as *authService) Logout(ctx context.Context, request *auth.LogoutRequest) 
 		return nil, err
 	}
 
-	tokenClaims, err := jwtentity.GetClaimsFromToken(jwtToken)
+	tokenClaims, err := jwtentity.GetClaimsFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +195,36 @@ func (as *authService) ChangePassword(ctx context.Context, request *auth.ChangeP
 	// kirim resp
 	return &auth.ChangePasswordResponse{
 		Base: utils.SuccessResponse("change password success"),
+	}, nil
+}
+
+func (as *authService) GetProfile(ctx context.Context, request *auth.GetProfileRequest) (*auth.GetProfileResponse, error) {
+	// get data token
+
+	claims, err := jwtentity.GetClaimsFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// ambil data dari db
+	user, err := as.authRepository.GetUserByEmail(ctx, claims.Email)
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		return &auth.GetProfileResponse{
+			Base: utils.BadRequestResponse("user doesnt exist"),
+		}, nil
+	}
+
+	// kirim resp
+	return &auth.GetProfileResponse{
+		Base:        utils.SuccessResponse("get profile success"),
+		UserId:      claims.Subject,
+		FullName:    claims.FullName,
+		Email:       claims.Email,
+		RoleCode:    claims.Role,
+		MemberSince: timestamppb.New(user.CreatedAt),
 	}, nil
 }
 

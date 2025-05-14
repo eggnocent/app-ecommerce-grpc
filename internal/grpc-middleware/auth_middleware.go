@@ -34,8 +34,10 @@ func (au *AuthMiddleware) Middleware(ctx context.Context, req any, info *grpc.Un
 		return nil, err
 	}
 
+	ctx = context.WithValue(ctx, jwtentity.JwtEntityContextKeyValue, claims)
+
 	// sematkan entity ke context
-	claims.SetToContext(ctx)
+	ctx = claims.SetToContext(ctx)
 
 	res, err := handler(ctx, req)
 
