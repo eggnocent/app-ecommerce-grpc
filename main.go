@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
+	grpcmiddleware "github/eggnocent/app-grpc-eccomerce/internal/grpc-middleware"
 	"github/eggnocent/app-grpc-eccomerce/internal/handler"
 	"github/eggnocent/app-grpc-eccomerce/internal/repository"
 	"github/eggnocent/app-grpc-eccomerce/internal/service"
 	"github/eggnocent/app-grpc-eccomerce/pb/auth"
 	"github/eggnocent/app-grpc-eccomerce/pkg/database"
-	grpcmiddleware "github/eggnocent/app-grpc-eccomerce/pkg/grpc-middleware"
 	"log"
 	"net"
 	"os"
@@ -31,6 +31,7 @@ func main() {
 	db := database.ConnectDB(ctx, os.Getenv("DB_URI"))
 	log.Println("connected to database...")
 	cacheService := gocache.New(time.Hour*24, time.Hour)
+	authMiddleware := grpcmiddleware.NewAuthMiddleware(cacheService)
 
 	authRepository := repository.NewAuthRepository(db)
 	authService := service.NewAuthService(authRepository, cacheService)
@@ -39,6 +40,7 @@ func main() {
 	serv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpcmiddleware.ErrorMiddleware,
+			authMiddleware.Middleware,
 		),
 	)
 

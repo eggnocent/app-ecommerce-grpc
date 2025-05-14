@@ -3,21 +3,20 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github/eggnocent/app-grpc-eccomerce/internal/entity"
 	"github/eggnocent/app-grpc-eccomerce/internal/repository"
 	"github/eggnocent/app-grpc-eccomerce/internal/utils"
 	"github/eggnocent/app-grpc-eccomerce/pb/auth"
 	"os"
-	"strings"
 	"time"
+
+	jwtentity "github/eggnocent/app-grpc-eccomerce/internal/entity/jwt"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	gocache "github.com/patrickmn/go-cache"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -101,7 +100,7 @@ func (as *authService) Login(ctx context.Context, request *auth.LoginRequest) (*
 	}
 	// generate jwt
 	now := time.Now()
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, entity.JwtClaims{
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwtentity.JwtClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.Id,
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour * 24)),
@@ -127,46 +126,18 @@ func (as *authService) Login(ctx context.Context, request *auth.LoginRequest) (*
 
 func (as *authService) Logout(ctx context.Context, request *auth.LogoutRequest) (*auth.LogoutResponse, error) {
 	// ambil metadata
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "Unauthenticated")
+	jwtToken, err := jwtentity.ParseTokenFromContext(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	bearerToken, ok := md["authorization"]
-	if !ok || len(bearerToken) == 0 {
-		return nil, status.Errorf(codes.Unauthenticated, "Unauthenticated")
+	tokenClaims, err := jwtentity.GetClaimsFromToken(jwtToken)
+	if err != nil {
+		return nil, err
 	}
-
-	tokenSplit := strings.Split(bearerToken[0], " ")
-	if len(tokenSplit) != 2 || tokenSplit[0] != "Bearer" {
-		return nil, status.Errorf(codes.Unauthenticated, "Unauthenticated")
-	}
-
-	jwtToken := tokenSplit[1]
-
-	tokenClaims, err := jwt.ParseWithClaims(
-		jwtToken,
-		&entity.JwtClaims{},
-		func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method %v", t.Header["alg"])
-			}
-			return []byte(os.Getenv("JWT_SECRET")), nil
-		},
-	)
-
-	if err != nil || !tokenClaims.Valid {
-		return nil, status.Errorf(codes.Unauthenticated, "Unauthenticated")
-	}
-
-	claimsPtr, _ := tokenClaims.Claims.(*entity.JwtClaims)
-	if claimsPtr == nil {
-		return nil, status.Errorf(codes.Unauthenticated, "Unauthenticated")
-	}
-	claims := claimsPtr
 
 	// blacklist token di cache hingga masa berlaku habis
-	as.cacheService.Set(jwtToken, "", time.Until(time.Unix(claims.ExpiresAt.Unix(), 0)))
+	as.cacheService.Set(jwtToken, "", time.Until(time.Unix(tokenClaims.ExpiresAt.Unix(), 0)))
 
 	return &auth.LogoutResponse{
 		Base: utils.SuccessResponse("logout success"),

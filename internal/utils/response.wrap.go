@@ -1,6 +1,11 @@
 package utils
 
-import "github/eggnocent/app-grpc-eccomerce/pb/common"
+import (
+	"github/eggnocent/app-grpc-eccomerce/pb/common"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
 
 func SuccessResponse(message string) *common.BaseResponse {
 	return &common.BaseResponse{
@@ -24,4 +29,8 @@ func ValidationErrorResponse(validationsErrors []*common.ValidationError) *commo
 		IsError:          true,
 		ValidationErrors: validationsErrors,
 	}
+}
+
+func UnauthenticatedResponse() error {
+	return status.Error(codes.Unauthenticated, "Unauthenticated")
 }
