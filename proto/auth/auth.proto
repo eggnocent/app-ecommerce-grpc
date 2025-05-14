@@ -10,6 +10,7 @@ option go_package = "github/eggnocent/app-grpc-eccomerce/pb/auth";
 service AuthService {
     rpc Register(RegisterRequest) returns (RegisterResponse);
     rpc Login(LoginRequest) returns (LoginResponse);
+    rpc Logout(LogoutRequest) returns (LogoutResponse);
 }
 
 message RegisterRequest {
@@ -31,4 +32,10 @@ message LoginRequest {
 message LoginResponse {
     common.BaseResponse base = 1;
     string access_token = 2;
+}
+
+message LogoutRequest {}
+
+message LogoutResponse {
+    common.BaseResponse base = 1;
 }
