@@ -7,9 +7,9 @@ import "buf/validate/validate.proto";
 
 option go_package = "github/eggnocent/app-grpc-eccomerce/pb/auth";
 
-
 service AuthService {
     rpc Register(RegisterRequest) returns (RegisterResponse);
+    rpc Login(LoginRequest) returns (LoginResponse);
 }
 
 message RegisterRequest {
@@ -21,4 +21,14 @@ message RegisterRequest {
 
 message RegisterResponse {
     common.BaseResponse base = 1;
+}
+
+message LoginRequest {
+    string email = 1 [(buf.validate.field).string = {email: true, min_len: 1, max_len: 255}];
+    string password = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
+}
+
+message LoginResponse {
+    common.BaseResponse base = 1;
+    string access_token = 2;
 }
