@@ -13,7 +13,7 @@ type UserRole struct {
 	Email     string
 	Code      string
 	CreatedAt time.Time
-	CreatedBy *string
+	CreatedBy string
 	UpdatedAt time.Time
 	UpdatedBy *string
 	DeletedAt time.Time

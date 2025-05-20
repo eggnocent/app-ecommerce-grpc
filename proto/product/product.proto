@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+import "common/base-response.proto";
+import "buf/validate/validate.proto";
+
+
+option go_package = "github/eggnocent/app-grpc-eccomerce/pb/product";
+
+
+package product;
+
+service ProductService {
+    rpc CreateProduct(CreateProductRequest) returns (CreatedProductResponse);
+}
+
+message CreateProductRequest{
+    string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 255}];;
+    string description = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];;
+    double price = 3 [(buf.validate.field).double.gte = 0];
+    string image_file_name = 4 [(buf.validate.field).string = {min_len: 1, max_len: 255}];;
+}
+
+message CreatedProductResponse {
+    common.BaseResponse base = 1;
+    string id = 2;
+}

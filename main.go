@@ -7,6 +7,7 @@ import (
 	"github/eggnocent/app-grpc-eccomerce/internal/repository"
 	"github/eggnocent/app-grpc-eccomerce/internal/service"
 	"github/eggnocent/app-grpc-eccomerce/pb/auth"
+	"github/eggnocent/app-grpc-eccomerce/pb/product"
 	"github/eggnocent/app-grpc-eccomerce/pkg/database"
 	"log"
 	"net"
@@ -37,6 +38,10 @@ func main() {
 	authService := service.NewAuthService(authRepository, cacheService)
 	authHandler := handler.NewAuthHandler(authService)
 
+	productRepository := repository.NewProductRepository(db)
+	productService := service.NewProductService(productRepository)
+	productHandler := handler.NewProductHandler(productService)
+
 	serv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpcmiddleware.ErrorMiddleware,
@@ -45,6 +50,7 @@ func main() {
 	)
 
 	auth.RegisterAuthServiceServer(serv, authHandler)
+	product.RegisterProductServiceServer(serv, productHandler)
 
 	if os.Getenv("ENVIRONTMENT") == "dev" {
 		reflection.Register(serv)
