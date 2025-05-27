@@ -50,7 +50,7 @@ func UploadProducrtImageHandler(c *fiber.Ctx) error {
 	}
 
 	timestamp := time.Now().UnixNano()
-	fileName := fmt.Sprintf("/product_%d%s", timestamp, filepath.Ext(file.Filename))
+	fileName := fmt.Sprintf("product_%d%s", timestamp, filepath.Ext(file.Filename))
 	uploadPath := "./storage/product/" + fileName
 	if err := c.SaveFile(file, uploadPath); err != nil {
 		fmt.Println(err)

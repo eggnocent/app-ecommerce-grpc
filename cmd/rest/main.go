@@ -42,7 +42,11 @@ func handleGetFileName(c *fiber.Ctx) error {
 func main() {
 	app := fiber.New()
 
-	app.Use(cors.New())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "http://localhost:5173",
+		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders: "Origin, Content-Type, Accept",
+	}))
 
 	app.Get("/storage/product/:filename", handleGetFileName)
 
