@@ -11,6 +11,7 @@ import "buf/validate/validate.proto";
 
 service CartService {
     rpc AddProductToCart(AddProductToCartRequest) returns (AddProductToCartResponse);
+    rpc ListCart(ListCartRequest) returns (ListCartResponse);
 }
 
 message AddProductToCartRequest {
@@ -20,5 +21,21 @@ message AddProductToCartRequest {
 message AddProductToCartResponse {
     common.BaseResponse base = 1;
     string id = 2;
+}
 
+message ListCartRequest {}
+
+message ListCartResponseItem {
+    string cart_id = 1;
+    string product_id = 2;
+    string product_name = 3;
+    string product_image_url = 4;
+    double product_price = 5;
+    int64 quantity = 6;
+}
+
+
+message ListCartResponse {
+    common.BaseResponse base = 1;
+    repeated ListCartResponseItem items = 2;
 }

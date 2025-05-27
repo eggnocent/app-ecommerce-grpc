@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"github/eggnocent/app-grpc-eccomerce/internal/entity"
+	"log"
 )
 
 type ICartRepository interface {
 	GetCartByProductAndUserID(ctx context.Context, ProductId, userID string) (*entity.UserCart, error)
 	CreateNewCart(ctx context.Context, cart *entity.UserCart) error
 	UpdatedCart(ctx context.Context, cart *entity.UserCart) error
+	GetListCart(ctx context.Context, userID string) ([]*entity.UserCart, error)
 }
 
 type cartRepository struct {
@@ -88,6 +90,66 @@ func (cr *cartRepository) UpdatedCart(ctx context.Context, cart *entity.UserCart
 	}
 
 	return nil
+}
+
+func (cr *cartRepository) GetListCart(ctx context.Context, userID string) ([]*entity.UserCart, error) {
+	query := `SELECT 
+				uc.id, 
+				uc.product_id, 
+				uc.user_id, 
+				uc.quantity, 
+				uc.created_at, 
+				uc.created_by, 
+				uc.updated_at, 
+				uc.updated_by,
+				p.id,
+				p.name,
+				p.image_file_name,
+				p.price
+				FROM 
+					user_cart uc
+				JOIN
+					 product p
+				ON 
+					uc.product_id = p.id 
+				WHERE 
+					uc.user_id = $1
+				AND
+					p.is_deleted = false`
+	rows, err := cr.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var carts []*entity.UserCart = make([]*entity.UserCart, 0)
+	for rows.Next() {
+		var cart entity.UserCart
+		cart.Product = &entity.Product{}
+
+		err := rows.Scan(
+			&cart.ID,
+			&cart.ProductID,
+			&cart.UserID,
+			&cart.Quantity,
+			&cart.CreatedAt,
+			&cart.CreatedBy,
+			&cart.UpdatedAt,
+			&cart.UpdatedBy,
+			&cart.Product.Id,
+			&cart.Product.Name,
+			&cart.Product.ImageFileName,
+			&cart.Product.Price,
+		)
+
+		if err != nil {
+			log.Println("error scan cart: %v", err)
+			return nil, err
+		}
+
+		carts = append(carts, &cart)
+	}
+
+	return carts, nil
 }
 
 func NewCartRepository(db *sql.DB) ICartRepository {

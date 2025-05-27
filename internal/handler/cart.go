@@ -33,6 +33,26 @@ func (ch *cartHandler) AddProductToCart(ctx context.Context, request *cart.AddPr
 	return resp, nil
 }
 
+func (ch *cartHandler) ListCart(ctx context.Context, request *cart.ListCartRequest) (*cart.ListCartResponse, error) {
+	validationsErrors, err := utils.CheckValidation(request)
+	if err != nil {
+		return nil, err
+	}
+
+	if validationsErrors != nil {
+		return &cart.ListCartResponse{
+			Base: utils.ValidationErrorResponse(validationsErrors),
+		}, nil
+	}
+
+	resp, err := ch.cartService.ListCart(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func NewCartHandler(cartService service.ICartService) *cartHandler {
 	return &cartHandler{
 		cartService: cartService,
