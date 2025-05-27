@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"github/eggnocent/app-grpc-eccomerce/internal/entity"
-	"log"
 )
 
 type ICartRepository interface {
@@ -144,7 +143,6 @@ func (cr *cartRepository) GetListCart(ctx context.Context, userID string) ([]*en
 		)
 
 		if err != nil {
-			log.Println("error scan cart: %v", err)
 			return nil, err
 		}
 

@@ -9,7 +9,6 @@ import (
 	"github/eggnocent/app-grpc-eccomerce/internal/repository"
 	"github/eggnocent/app-grpc-eccomerce/internal/utils"
 	"github/eggnocent/app-grpc-eccomerce/pb/cart"
-	"log"
 	"os"
 	"time"
 
@@ -25,6 +24,7 @@ type ICartService interface {
 	AddProductToCart(ctx context.Context, request *cart.AddProductToCartRequest) (*cart.AddProductToCartResponse, error)
 	ListCart(ctx context.Context, request *cart.ListCartRequest) (*cart.ListCartResponse, error)
 	DeleteCart(ctx context.Context, request *cart.DeleteCartRequest) (*cart.DeleteCartResponse, error)
+	UpdateQuantity(ctx context.Context, request *cart.UpdateCartQuantityRequest) (*cart.UpdateCartQuantityResponse, error)
 }
 
 func (cs *cartService) AddProductToCart(ctx context.Context, request *cart.AddProductToCartRequest) (*cart.AddProductToCartResponse, error) {
@@ -104,22 +104,16 @@ func (cs *cartService) ListCart(ctx context.Context, request *cart.ListCartReque
 
 	carts, err := cs.cartRepository.GetListCart(ctx, claims.Subject)
 	if err != nil {
-		log.Printf("error from getlistcart: %v", err)
 		return nil, err
 	}
 
 	var items []*cart.ListCartResponseItem
 
 	for _, cartEntity := range carts {
-		log.Printf("cartEntity.ID = %s", cartEntity.ID)
 
 		if cartEntity.Product == nil {
-			log.Println("cartEntity.Product is nil!")
 			return nil, errors.New("internal error: product data not found in cart")
 		}
-
-		log.Printf("cartEntity.Product.Name = %s", cartEntity.Product.Name)
-		log.Printf("cartEntity.Product.ImageFileName = %s", cartEntity.Product.ImageFileName)
 
 		item := cart.ListCartResponseItem{
 			CartId:          cartEntity.ID,
@@ -177,6 +171,62 @@ func (cs *cartService) DeleteCart(ctx context.Context, request *cart.DeleteCartR
 	return &cart.DeleteCartResponse{
 		Base: utils.SuccessResponse("delete cart success"),
 	}, nil
+}
+
+func (cs *cartService) UpdateQuantity(ctx context.Context, request *cart.UpdateCartQuantityRequest) (*cart.UpdateCartQuantityResponse, error) {
+	// get data cart by id
+	// cocokan user id
+	// update new quantity
+	// update ke db
+	// success response
+
+	claims, err := jwtentity.GetClaimsFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cartEntity, err := cs.cartRepository.GetCartByID(ctx, request.CartId)
+	if err != nil {
+		return nil, err
+	}
+
+	if cartEntity == nil {
+		return &cart.UpdateCartQuantityResponse{
+			Base: utils.NotFoundResponse("not found cart"),
+		}, nil
+	}
+
+	if cartEntity.UserID != claims.Subject {
+		return &cart.UpdateCartQuantityResponse{
+			Base: utils.BadRequestResponse("cart user id is not match"),
+		}, nil
+	}
+
+	if request.NewQuantity == 0 {
+		err = cs.cartRepository.DeleteCart(ctx, request.CartId)
+		if err != nil {
+			return nil, err
+		}
+
+		return &cart.UpdateCartQuantityResponse{
+			Base: utils.SuccessResponse("update cart quantity success"),
+		}, nil
+	}
+
+	now := time.Now()
+	cartEntity.Quantity = int(request.NewQuantity)
+	cartEntity.UpdatedAt = &now
+	cartEntity.UpdatedBy = &claims.FullName
+
+	err = cs.cartRepository.UpdatedCart(ctx, cartEntity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cart.UpdateCartQuantityResponse{
+		Base: utils.SuccessResponse("update cart quantity success"),
+	}, nil
+
 }
 
 func NewCartService(productRepository repository.IProductRepository, cartRepository repository.ICartRepository) ICartService {
