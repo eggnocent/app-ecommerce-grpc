@@ -24,6 +24,7 @@ type cartService struct {
 type ICartService interface {
 	AddProductToCart(ctx context.Context, request *cart.AddProductToCartRequest) (*cart.AddProductToCartResponse, error)
 	ListCart(ctx context.Context, request *cart.ListCartRequest) (*cart.ListCartResponse, error)
+	DeleteCart(ctx context.Context, request *cart.DeleteCartRequest) (*cart.DeleteCartResponse, error)
 }
 
 func (cs *cartService) AddProductToCart(ctx context.Context, request *cart.AddProductToCartRequest) (*cart.AddProductToCartResponse, error) {
@@ -137,6 +138,45 @@ func (cs *cartService) ListCart(ctx context.Context, request *cart.ListCartReque
 		Items: items,
 	}, nil
 
+}
+
+func (cs *cartService) DeleteCart(ctx context.Context, request *cart.DeleteCartRequest) (*cart.DeleteCartResponse, error) {
+	// dapat user id
+	// dapat data card
+	// cocokan data user id di cart dengan auth
+	// delete dengan hard delete
+	// kirim response
+
+	claims, err := jwtentity.GetClaimsFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cartEntity, err := cs.cartRepository.GetCartByID(ctx, request.CartId)
+	if err != nil {
+		return nil, err
+	}
+
+	if cartEntity == nil {
+		return &cart.DeleteCartResponse{
+			Base: utils.NotFoundResponse("not found cart"),
+		}, nil
+	}
+
+	if cartEntity.UserID != claims.Subject {
+		return &cart.DeleteCartResponse{
+			Base: utils.BadRequestResponse("user_id is not match"),
+		}, nil
+	}
+
+	err = cs.cartRepository.DeleteCart(ctx, request.CartId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cart.DeleteCartResponse{
+		Base: utils.SuccessResponse("delete cart success"),
+	}, nil
 }
 
 func NewCartService(productRepository repository.IProductRepository, cartRepository repository.ICartRepository) ICartService {
