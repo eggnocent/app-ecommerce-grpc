@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package cart;
+
+option go_package = "github/eggnocent/app-grpc-eccomerce/pb/cart";
+
+import "common/base-response.proto";
+import "buf/validate/validate.proto";
+
+
+
+service CartService {
+    rpc AddProductToCart(AddProductToCartRequest) returns (AddProductToCartResponse);
+}
+
+message AddProductToCartRequest {
+    string product_id = 1[(buf.validate.field).string = { min_len: 1, max_len: 255 }];
+}
+
+message AddProductToCartResponse {
+    common.BaseResponse base = 1;
+    string id = 2;
+
+}
