@@ -8,6 +8,7 @@ import (
 	"github/eggnocent/app-grpc-eccomerce/internal/service"
 	"github/eggnocent/app-grpc-eccomerce/pb/auth"
 	"github/eggnocent/app-grpc-eccomerce/pb/cart"
+	"github/eggnocent/app-grpc-eccomerce/pb/order"
 	"github/eggnocent/app-grpc-eccomerce/pb/product"
 	"github/eggnocent/app-grpc-eccomerce/pkg/database"
 	"log"
@@ -47,6 +48,10 @@ func main() {
 	cartService := service.NewCartService(productRepository, cartRepository)
 	cartHandler := handler.NewCartHandler(cartService)
 
+	orderRepository := repository.NewOrderRepository(db)
+	orderService := service.NewOrderService(orderRepository, productRepository)
+	orderHandler := handler.NewOrderHandler(orderService)
+
 	serv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpcmiddleware.ErrorMiddleware,
@@ -57,6 +62,7 @@ func main() {
 	auth.RegisterAuthServiceServer(serv, authHandler)
 	product.RegisterProductServiceServer(serv, productHandler)
 	cart.RegisterCartServiceServer(serv, cartHandler)
+	order.RegisterOrderServiceServer(serv, orderHandler)
 
 	if os.Getenv("ENVIRONTMENT") == "dev" {
 		reflection.Register(serv)

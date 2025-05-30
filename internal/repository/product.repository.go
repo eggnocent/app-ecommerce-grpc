@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"github/eggnocent/app-grpc-eccomerce/internal/entity"
 	"github/eggnocent/app-grpc-eccomerce/pb/common"
+	"strings"
 	"time"
 )
 
 type IProductRepository interface {
 	CreateNewProduct(ctx context.Context, product *entity.Product) error
 	GetProductByID(ctx context.Context, id string) (*entity.Product, error)
+	GetProductByIDs(ctx context.Context, ids []string) ([]*entity.Product, error)
 	UpdateProduct(ctx context.Context, product *entity.Product) error
 	DeleteProduct(ctx context.Context, id string, deletedAt time.Time, deletedBy string) error
 	GetProductPagination(ctx context.Context, pagination *common.PaginationRequest) ([]*entity.Product, *common.PaginationResponse, error)
@@ -77,6 +79,44 @@ func (repo *productRepository) GetProductByID(ctx context.Context, id string) (*
 	}
 
 	return &productEntity, nil
+}
+
+func (repo *productRepository) GetProductByIDs(ctx context.Context, ids []string) ([]*entity.Product, error) {
+	queryIds := make([]string, len(ids))
+	for i, id := range ids {
+		queryIds[i] = fmt.Sprintf("'%s'", id)
+	}
+
+	query := fmt.Sprintf(
+		`
+		SELECT id, name, price, image_file_name FROM product WHERE id IN (%s) AND is_deleted = false
+	`, strings.Join(queryIds, ", "),
+	)
+
+	rows, err := repo.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	var products []*entity.Product = make([]*entity.Product, 0)
+	for rows.Next() {
+		var productEntity entity.Product
+		err = rows.Scan(
+			&productEntity.Id,
+			&productEntity.Name,
+			&productEntity.Price,
+			&productEntity.ImageFileName,
+		)
+
+		products = append(products, &productEntity)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return products, nil
+
 }
 
 func (repo *productRepository) UpdateProduct(ctx context.Context, product *entity.Product) error {
