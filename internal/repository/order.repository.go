@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"github/eggnocent/app-grpc-eccomerce/internal/entity"
+	"github/eggnocent/app-grpc-eccomerce/pkg/database"
 )
 
 type IOrderRepository interface {
+	WithTransaction(tx *sql.Tx) IOrderRepository
 	GetNumbering(ctx context.Context, module string) (*entity.Numbering, error)
 	CreateOrder(ctx context.Context, order *entity.Order) error
 	UpdateNumbering(ctx context.Context, numbering *entity.Numbering) error
@@ -15,7 +17,13 @@ type IOrderRepository interface {
 }
 
 type orderRepository struct {
-	db *sql.DB
+	db database.DatabaseQuery
+}
+
+func (os *orderRepository) WithTransaction(tx *sql.Tx) IOrderRepository {
+	return &orderRepository{
+		db: tx,
+	}
 }
 
 func (or *orderRepository) GetNumbering(ctx context.Context, module string) (*entity.Numbering, error) {
@@ -27,6 +35,8 @@ func (or *orderRepository) GetNumbering(ctx context.Context, module string) (*en
 			numbering 
 		WHERE 
 			module = $1
+		FOR
+			UPDATE
 	`
 
 	row := or.db.QueryRowContext(ctx, query, module)
@@ -200,7 +210,7 @@ func (or *orderRepository) UpdateNumbering(ctx context.Context, numbering *entit
 	return nil
 }
 
-func NewOrderRepository(db *sql.DB) IOrderRepository {
+func NewOrderRepository(db database.DatabaseQuery) IOrderRepository {
 	return &orderRepository{
 		db: db,
 	}

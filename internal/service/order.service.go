@@ -2,15 +2,19 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github/eggnocent/app-grpc-eccomerce/internal/entity"
 	jwtentity "github/eggnocent/app-grpc-eccomerce/internal/entity/jwt"
 	"github/eggnocent/app-grpc-eccomerce/internal/repository"
 	"github/eggnocent/app-grpc-eccomerce/internal/utils"
 	"github/eggnocent/app-grpc-eccomerce/pb/order"
+	"log"
+	"runtime/debug"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 type IOrderService interface {
@@ -18,31 +22,57 @@ type IOrderService interface {
 }
 
 type orderService struct {
+	db                *sql.DB
 	orderRepository   repository.IOrderRepository
 	productRepository repository.IProductRepository
 }
 
 func (os *orderService) CreateOrder(ctx context.Context, request *order.CreateOrderRequest) (*order.CreateOrderResponse, error) {
-
 	claims, err := jwtentity.GetClaimsFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	numbering, err := os.orderRepository.GetNumbering(ctx, "order")
+	tx, err := os.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if e := recover(); e != nil {
+			_ = tx.Rollback()
+			debug.PrintStack()
+			panic(e)
+		}
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	orderRepo := os.orderRepository.WithTransaction(tx)
+	productRepo := os.productRepository.WithTransaction(tx)
+
+	numbering, err := orderRepo.GetNumbering(ctx, "order")
 	if err != nil {
 		return nil, err
 	}
 
-	// Ambil produk
 	var productIDs = make([]string, len(request.Products))
 	for i := range request.Products {
 		productIDs[i] = request.Products[i].Id
 	}
 
-	products, err := os.productRepository.GetProductByIDs(ctx, productIDs)
+	products, err := productRepo.GetProductByIDs(ctx, productIDs)
 	if err != nil {
-		return nil, err
+
+		if pqErr, ok := err.(*pq.Error); ok {
+			log.Printf("[Service] Detail Postgres Error: %s", pqErr.Message)
+		}
+
+		for _, p := range request.Products {
+			return &order.CreateOrderResponse{
+				Base: utils.NotFoundResponse(fmt.Sprintf("product %s not found", p.Id)),
+			}, nil
+		}
 	}
 
 	productMap := make(map[string]*entity.Product)
@@ -53,6 +83,7 @@ func (os *orderService) CreateOrder(ctx context.Context, request *order.CreateOr
 	var total float64 = 0
 	for _, p := range request.Products {
 		if productMap[p.Id] == nil {
+			_ = tx.Rollback()
 			return &order.CreateOrderResponse{
 				Base: utils.NotFoundResponse(fmt.Sprintf("product %s not found", p.Id)),
 			}, nil
@@ -78,7 +109,7 @@ func (os *orderService) CreateOrder(ctx context.Context, request *order.CreateOr
 		CreatedBy:       claims.FullName,
 	}
 
-	err = os.orderRepository.CreateOrder(ctx, &orderEntity)
+	err = orderRepo.CreateOrder(ctx, &orderEntity)
 	if err != nil {
 		return nil, err
 	}
@@ -96,17 +127,19 @@ func (os *orderService) CreateOrder(ctx context.Context, request *order.CreateOr
 			CreatedBy:            claims.FullName,
 		}
 
-		fmt.Println("[Service] Simpan order item:", orderItem.ProductName)
-
-		err = os.orderRepository.CreateOrderItem(ctx, &orderItem)
+		err = orderRepo.CreateOrderItem(ctx, &orderItem)
 		if err != nil {
-			fmt.Println("[Service] Gagal simpan order item:", err)
 			return nil, err
 		}
 	}
 
 	numbering.Numbering++
-	err = os.orderRepository.UpdateNumbering(ctx, numbering)
+	err = orderRepo.UpdateNumbering(ctx, numbering)
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit()
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +150,9 @@ func (os *orderService) CreateOrder(ctx context.Context, request *order.CreateOr
 	}, nil
 }
 
-func NewOrderService(orderRepository repository.IOrderRepository, productRepository repository.IProductRepository) IOrderService {
+func NewOrderService(db *sql.DB, orderRepository repository.IOrderRepository, productRepository repository.IProductRepository) IOrderService {
 	return &orderService{
+		db:                db,
 		orderRepository:   orderRepository,
 		productRepository: productRepository,
 	}
