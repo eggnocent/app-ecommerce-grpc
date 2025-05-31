@@ -42,6 +42,8 @@ func handleGetFileName(c *fiber.Ctx) error {
 func main() {
 	app := fiber.New()
 
+	webHookHandler := handler.NewWebHookHandler()
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:5173",
 		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
@@ -51,6 +53,7 @@ func main() {
 	app.Get("/storage/product/:filename", handleGetFileName)
 
 	app.Post("/product/upload", handler.UploadProducrtImageHandler)
+	app.Post("/webhook/xendit/invoice", webHookHandler.ReceiveInvoice)
 
 	app.Listen(":3000")
 }

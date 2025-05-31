@@ -11,23 +11,28 @@ const (
 )
 
 type Order struct {
-	ID              string
-	Number          string
-	UserID          string
-	OrderStatusCode string
-	UserFullName    string
-	Address         string
-	PhoneNumber     string
-	Notes           *string
-	Total           float64
-	ExpiredAt       *time.Time
-	CreatedAt       time.Time
-	CreatedBy       string
-	UpdatedAt       *time.Time
-	UpdatedBy       *string
-	DeletedAt       *time.Time
-	DeletedBy       *string
-	IsDeleted       bool
+	ID                   string
+	Number               string
+	UserID               string
+	OrderStatusCode      string
+	UserFullName         string
+	Address              string
+	PhoneNumber          string
+	Notes                *string
+	Total                float64
+	ExpiredAt            *time.Time
+	CreatedAt            time.Time
+	CreatedBy            string
+	UpdatedAt            *time.Time
+	UpdatedBy            *string
+	DeletedAt            *time.Time
+	DeletedBy            *string
+	IsDeleted            bool
+	XenditInvoiceID      *string
+	XenditInvoiceUrl     *string
+	XenditPaidAt         *time.Time
+	XenditPaymentMethod  *string
+	XenditPaymentChanner *string
 }
 
 type OrderItem struct {

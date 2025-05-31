@@ -10,11 +10,14 @@ import (
 	"github/eggnocent/app-grpc-eccomerce/internal/utils"
 	"github/eggnocent/app-grpc-eccomerce/pb/order"
 	"log"
+	ops "os"
 	"runtime/debug"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/xendit/xendit-go"
+	"github.com/xendit/xendit-go/invoice"
 )
 
 type IOrderService interface {
@@ -108,6 +111,37 @@ func (os *orderService) CreateOrder(ctx context.Context, request *order.CreateOr
 		CreatedAt:       now,
 		CreatedBy:       claims.FullName,
 	}
+
+	invoiceItems := make([]xendit.InvoiceItem, 0)
+	for _, p := range request.Products {
+		prod := productMap[p.Id]
+		if prod != nil {
+			invoiceItems = append(invoiceItems, xendit.InvoiceItem{
+				Name:     prod.Name,
+				Price:    prod.Price,
+				Quantity: int(p.Quantity),
+			})
+		}
+	}
+
+	xenditInvoice, xenditErr := invoice.CreateWithContext(ctx, &invoice.CreateParams{
+		ExternalID: orderEntity.ID,
+		Amount:     total,
+		Customer: xendit.InvoiceCustomer{
+			GivenNames: claims.FullName,
+		},
+		Currency:           "IDR",
+		SuccessRedirectURL: fmt.Sprintf("%s/checkout/%s/success", ops.Getenv("FRONTEND_BASE_URL"), orderEntity.ID),
+		Items:              invoiceItems,
+	})
+
+	if xenditErr != nil {
+		err = xenditErr
+		return nil, err
+	}
+
+	orderEntity.XenditInvoiceID = &xenditInvoice.ID
+	orderEntity.XenditInvoiceUrl = &xenditInvoice.InvoiceURL
 
 	err = orderRepo.CreateOrder(ctx, &orderEntity)
 	if err != nil {

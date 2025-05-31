@@ -80,7 +80,9 @@ func (or *orderRepository) CreateOrder(ctx context.Context, order *entity.Order)
 			updated_by, 
 			deleted_at, 
 			deleted_by, 
-			is_deleted
+			is_deleted,
+			xendit_invoice_id,
+			xendit_invoice_url
 		) VALUES (
 		 	$1,
 			$2,
@@ -98,7 +100,9 @@ func (or *orderRepository) CreateOrder(ctx context.Context, order *entity.Order)
 			$14,
 			$15,
 			$16,
-			$17
+			$17,
+			$18,
+			$19
 		)
 	`
 
@@ -120,6 +124,8 @@ func (or *orderRepository) CreateOrder(ctx context.Context, order *entity.Order)
 		order.DeletedAt,
 		order.DeletedBy,
 		order.IsDeleted,
+		order.XenditInvoiceID,
+		order.XenditInvoiceUrl,
 	)
 
 	if err != nil {
