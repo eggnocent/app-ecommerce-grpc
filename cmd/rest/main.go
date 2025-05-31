@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
 	"github/eggnocent/app-grpc-eccomerce/internal/handler"
+	"github/eggnocent/app-grpc-eccomerce/internal/repository"
+	"github/eggnocent/app-grpc-eccomerce/internal/service"
+	"github/eggnocent/app-grpc-eccomerce/pkg/database"
 	"log"
 	"mime"
 	"net/http"
@@ -10,6 +14,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/joho/godotenv"
 )
 
 func handleGetFileName(c *fiber.Ctx) error {
@@ -40,9 +45,15 @@ func handleGetFileName(c *fiber.Ctx) error {
 }
 
 func main() {
+	godotenv.Load()
+	ctx := context.Background()
 	app := fiber.New()
 
-	webHookHandler := handler.NewWebHookHandler()
+	db := database.ConnectDB(ctx, os.Getenv("DB_URI"))
+
+	orderRepository := repository.NewOrderRepository(db)
+	webHookService := service.NewWebHookService(orderRepository)
+	webHookHandler := handler.NewWebHookHandler(webHookService)
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:5173",
