@@ -18,6 +18,7 @@ import (
 
 	"github.com/joho/godotenv"
 	gocache "github.com/patrickmn/go-cache"
+	"github.com/xendit/xendit-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -25,6 +26,9 @@ import (
 func main() {
 	ctx := context.Background()
 	godotenv.Load()
+
+	xendit.Opt.SecretKey = os.Getenv("XENDIT_SECRET")
+
 	list, err := net.Listen("tcp", ":50051")
 
 	if err != nil {
