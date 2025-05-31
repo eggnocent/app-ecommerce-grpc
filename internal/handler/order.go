@@ -34,6 +34,26 @@ func (oh *orderHandler) CreateOrder(ctx context.Context, request *order.CreateOr
 	return req, nil
 }
 
+func (oh *orderHandler) ListOrderAdmin(ctx context.Context, request *order.ListOrderAdminRequest) (*order.ListOrderAdminResponse, error) {
+	validationsErrors, err := utils.CheckValidation(request)
+	if err != nil {
+		return nil, err
+	}
+
+	if validationsErrors != nil {
+		return &order.ListOrderAdminResponse{
+			Base: utils.ValidationErrorResponse(validationsErrors),
+		}, nil
+	}
+
+	req, err := oh.orderService.ListOrderAdmin(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func NewOrderHandler(orderService service.IOrderService) *orderHandler {
 	return &orderHandler{
 		orderService: orderService,

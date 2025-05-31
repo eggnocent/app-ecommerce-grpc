@@ -18,10 +18,12 @@ import (
 	"github.com/lib/pq"
 	"github.com/xendit/xendit-go"
 	"github.com/xendit/xendit-go/invoice"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type IOrderService interface {
 	CreateOrder(ctx context.Context, request *order.CreateOrderRequest) (*order.CreateOrderResponse, error)
+	ListOrderAdmin(ctx context.Context, request *order.ListOrderAdminRequest) (*order.ListOrderAdminResponse, error)
 }
 
 type orderService struct {
@@ -181,6 +183,57 @@ func (os *orderService) CreateOrder(ctx context.Context, request *order.CreateOr
 	return &order.CreateOrderResponse{
 		Base: utils.SuccessResponse("create order success"),
 		Id:   orderEntity.ID,
+	}, nil
+}
+
+func (os *orderService) ListOrderAdmin(ctx context.Context, request *order.ListOrderAdminRequest) (*order.ListOrderAdminResponse, error) {
+	claims, err := jwtentity.GetClaimsFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if claims.Role != entity.UserRoleAdmin {
+		return nil, utils.UnauthenticatedResponse()
+	}
+
+	orders, metadata, err := os.orderRepository.GetListOrderAdminPagination(ctx, request.Pagination)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*order.ListOrderAdminResponseItem, 0)
+	for _, o := range orders {
+
+		products := make([]*order.ListOrderAdminResponseItemProduct, 0)
+		for _, oi := range o.Items {
+			products = append(products, &order.ListOrderAdminResponseItemProduct{
+				Id:       oi.ProductID,
+				Name:     oi.ProductName,
+				Price:    oi.ProductPrice,
+				Quantity: oi.Quantity,
+			})
+		}
+
+		orderStatusCode := o.OrderStatusCode
+		if o.OrderStatusCode == entity.OrderStatusCodeUnpaid && time.Now().After(*o.ExpiredAt) {
+			orderStatusCode = entity.OrderStatusCodeExpired
+		}
+
+		items = append(items, &order.ListOrderAdminResponseItem{
+			Id:         o.ID,
+			Number:     o.Number,
+			Customer:   o.UserFullName,
+			StatusCode: orderStatusCode,
+			Total:      o.Total,
+			CreatedAt:  timestamppb.New(o.CreatedAt),
+			Product:    products,
+		})
+	}
+
+	return &order.ListOrderAdminResponse{
+		Base:       utils.SuccessResponse("get list order admin success"),
+		Pagination: metadata,
+		Items:      items,
 	}, nil
 }
 

@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"github/eggnocent/app-grpc-eccomerce/internal/entity"
+	"github/eggnocent/app-grpc-eccomerce/pb/common"
 	"github/eggnocent/app-grpc-eccomerce/pkg/database"
 	"log"
+	"strings"
 )
 
 type IOrderRepository interface {
@@ -17,6 +20,7 @@ type IOrderRepository interface {
 	CreateOrderItem(ctx context.Context, orderItem *entity.OrderItem) error
 	GetOrderByID(ctx context.Context, orderID string) (*entity.Order, error)
 	UpdateOrder(ctx context.Context, order *entity.Order) error
+	GetListOrderAdminPagination(ctx context.Context, pagination *common.PaginationRequest) ([]*entity.Order, *common.PaginationResponse, error)
 }
 
 type orderRepository struct {
@@ -285,6 +289,156 @@ func (or *orderRepository) UpdateOrder(ctx context.Context, order *entity.Order)
 
 	log.Println("[REPOSITORY] Update order berhasil:", order.ID)
 	return nil
+}
+
+func (or *orderRepository) GetListOrderAdminPagination(ctx context.Context, pagination *common.PaginationRequest) ([]*entity.Order, *common.PaginationResponse, error) {
+	qPgn := `
+		SELECT
+			COUNT (*)
+		FROM
+			"order"
+		WHERE
+			is_deleted = false
+	`
+
+	row := or.db.QueryRowContext(ctx, qPgn)
+	if row.Err() != nil {
+		return nil, nil, row.Err()
+	}
+
+	var totalCount int
+	err := row.Scan(
+		&totalCount,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	offset := (pagination.CurrentPage - 1) * pagination.ItemPerPage
+	totalPage := (totalCount + int(pagination.ItemPerPage) - 1) / int(pagination.ItemPerPage)
+
+	allowedSort := map[string]string{
+		"number":     "number",
+		"customer":   "user_full_name",
+		"total":      "total",
+		"created_at": "created_at",
+	}
+	sort := `ORDER BY created_at DESC`
+	if pagination.Sort != nil {
+		direction := "ASC"
+		sortField, ok := allowedSort[pagination.Sort.Field]
+		if ok {
+			if pagination.Sort.Direction == "desc" {
+				direction = "DESC"
+			}
+			sort = fmt.Sprintf("ORDER BY %s %s", sortField, direction)
+		}
+	}
+
+	query := fmt.Sprintf(
+		`
+		SELECT
+			id,
+			number,
+			order_status_code,
+			total,
+			user_full_name,
+			created_at,
+			expired_at
+		FROM
+			"order"
+		WHERE
+			is_deleted = false
+		%s
+		LIMIT 
+			$1
+		OFFSET
+			$2
+	`, sort)
+
+	rows, err := or.db.QueryContext(ctx, query, pagination.ItemPerPage, offset)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	orders := make([]*entity.Order, 0)
+	ids := make([]string, 0)
+	orderItemsMap := make(map[string][]*entity.OrderItem)
+	for rows.Next() {
+		var orderEntity entity.Order
+		err = rows.Scan(
+			&orderEntity.ID,
+			&orderEntity.Number,
+			&orderEntity.OrderStatusCode,
+			&orderEntity.Total,
+			&orderEntity.UserFullName,
+			&orderEntity.CreatedAt,
+			&orderEntity.ExpiredAt,
+		)
+
+		if err != nil {
+			return nil, nil, err
+		}
+
+		orders = append(orders, &orderEntity)
+		ids = append(ids, fmt.Sprintf("'%s'", orderEntity.ID))
+		orderItemsMap[orderEntity.ID] = make([]*entity.OrderItem, 0)
+	}
+
+	idsJoined := strings.Join(ids, ", ")
+
+	baseOrderItemQuery := fmt.Sprintf(
+		`
+		SELECT
+			product_id,
+			product_name,
+			product_price,
+			quantity,
+			order_id
+		FROM
+			order_item
+		WHERE
+			is_deleted = false
+		AND
+			order_id
+		IN
+			(%s)
+	`,
+		idsJoined)
+
+	rows, err = or.db.QueryContext(ctx, baseOrderItemQuery)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if rows.Next() {
+		var item entity.OrderItem
+		err = rows.Scan(
+			&item.ProductID,
+			&item.ProductName,
+			&item.ProductPrice,
+			&item.Quantity,
+			&item.OrderID,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		orderItemsMap[item.OrderID] = append(orderItemsMap[item.OrderID], &item)
+	}
+
+	for i, o := range orders {
+		orders[i].Items = orderItemsMap[o.ID]
+	}
+
+	var metadata common.PaginationResponse = common.PaginationResponse{
+		CurrentPage:    pagination.CurrentPage,
+		TotalPageCount: int32(totalPage),
+		ItemPerPage:    pagination.ItemPerPage,
+		TotalItemCount: int32(totalCount),
+	}
+	return orders, &metadata, nil
 }
 
 func NewOrderRepository(db database.DatabaseQuery) IOrderRepository {
