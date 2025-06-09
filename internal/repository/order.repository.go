@@ -227,7 +227,18 @@ func (or *orderRepository) UpdateNumbering(ctx context.Context, numbering *entit
 func (or *orderRepository) GetOrderByID(ctx context.Context, orderID string) (*entity.Order, error) {
 	query := `
 		SELECT 
-			id
+			id,
+			number,
+			user_full_name,
+			address,
+			phone_number,
+			notes,
+			order_status_code,
+			total,
+			created_at,
+			xendit_invoice_url,
+			user_id,
+			expired_at
 		FROM
 			"order"
 		WHERE
@@ -245,6 +256,17 @@ func (or *orderRepository) GetOrderByID(ctx context.Context, orderID string) (*e
 	var order entity.Order
 	err := row.Scan(
 		&order.ID,
+		&order.Number,
+		&order.UserFullName,
+		&order.Address,
+		&order.PhoneNumber,
+		&order.Notes,
+		&order.OrderStatusCode,
+		&order.Total,
+		&order.CreatedAt,
+		&order.XenditInvoiceUrl,
+		&order.UserID,
+		&order.ExpiredAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -252,6 +274,45 @@ func (or *orderRepository) GetOrderByID(ctx context.Context, orderID string) (*e
 		}
 		return nil, err
 	}
+
+	query2 := `
+		SELECT
+			product_id,
+			product_name,
+			product_price,
+			quantity
+		FROM
+			order_item
+		WHERE
+			order_id = $1
+		AND
+			is_deleted = false
+		`
+
+	rows, err := or.db.QueryContext(
+		ctx, query2, order.ID,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*entity.OrderItem, 0)
+	for rows.Next() {
+		var item entity.OrderItem
+		err = rows.Scan(
+			&item.ProductID,
+			&item.ProductName,
+			&item.ProductPrice,
+			&item.Quantity,
+		)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, &item)
+	}
+
+	order.Items = items
 
 	return &order, nil
 }

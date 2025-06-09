@@ -25,6 +25,7 @@ type IOrderService interface {
 	CreateOrder(ctx context.Context, request *order.CreateOrderRequest) (*order.CreateOrderResponse, error)
 	ListOrderAdmin(ctx context.Context, request *order.ListOrderAdminRequest) (*order.ListOrderAdminResponse, error)
 	ListOrder(ctx context.Context, request *order.ListOrderRequest) (*order.ListOrderResponse, error)
+	DetailOrder(ctx context.Context, request *order.DetailOrderRequest) (*order.DetailOrderResponse, error)
 }
 
 type orderService struct {
@@ -288,6 +289,64 @@ func (os *orderService) ListOrder(ctx context.Context, request *order.ListOrderR
 		Base:       utils.SuccessResponse("get list order admin success"),
 		Pagination: metadata,
 		Items:      items,
+	}, nil
+}
+
+func (os *orderService) DetailOrder(ctx context.Context, request *order.DetailOrderRequest) (*order.DetailOrderResponse, error) {
+	claims, err := jwtentity.GetClaimsFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	orderEntity, err := os.orderRepository.GetOrderByID(ctx, request.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	if claims.Role != entity.UserRoleAdmin && claims.Subject != orderEntity.UserID {
+		return &order.DetailOrderResponse{
+			Base: utils.BadRequestResponse("user id is not match"),
+		}, nil
+	}
+
+	notes := ""
+	if orderEntity.Notes != nil {
+		notes = *orderEntity.Notes
+	}
+	xenditInvoiceUrl := ""
+	if orderEntity.XenditInvoiceUrl != nil {
+		xenditInvoiceUrl = *orderEntity.XenditInvoiceUrl
+	}
+
+	orderStatusCode := orderEntity.OrderStatusCode
+	if orderEntity.OrderStatusCode == entity.OrderStatusCodeUnpaid && time.Now().After(*orderEntity.ExpiredAt) {
+		orderStatusCode = entity.OrderStatusCodeExpired
+	}
+
+	items := make([]*order.DetailOrderResponseItem, 0)
+	for _, oi := range orderEntity.Items {
+		items = append(items, &order.DetailOrderResponseItem{
+			Id:       oi.ProductID,
+			Name:     oi.ProductName,
+			Price:    oi.ProductPrice,
+			Quantity: oi.Quantity,
+		})
+	}
+
+	return &order.DetailOrderResponse{
+		Base:             utils.SuccessResponse("get order detail success"),
+		Id:               orderEntity.ID,
+		Number:           orderEntity.Number,
+		UserFullName:     orderEntity.UserFullName,
+		Address:          orderEntity.Address,
+		PhoneNumber:      orderEntity.PhoneNumber,
+		Notes:            notes,
+		OrderStatusCode:  orderStatusCode,
+		CreatedAt:        timestamppb.New(orderEntity.CreatedAt),
+		XenditInvoiceUrl: xenditInvoiceUrl,
+		Items:            items,
+		Total:            orderEntity.Total,
+		ExpiredAt:        timestamppb.New(*orderEntity.ExpiredAt),
 	}, nil
 }
 
