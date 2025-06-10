@@ -26,6 +26,7 @@ type IOrderService interface {
 	ListOrderAdmin(ctx context.Context, request *order.ListOrderAdminRequest) (*order.ListOrderAdminResponse, error)
 	ListOrder(ctx context.Context, request *order.ListOrderRequest) (*order.ListOrderResponse, error)
 	DetailOrder(ctx context.Context, request *order.DetailOrderRequest) (*order.DetailOrderResponse, error)
+	UpdateOrderStatus(ctx context.Context, request *order.UpdateOrderStatusRequest) (*order.UpdateOrderStatusResponse, error)
 }
 
 type orderService struct {
@@ -286,7 +287,7 @@ func (os *orderService) ListOrder(ctx context.Context, request *order.ListOrderR
 	}
 
 	return &order.ListOrderResponse{
-		Base:       utils.SuccessResponse("get list order admin success"),
+		Base:       utils.SuccessResponse("get list order success"),
 		Pagination: metadata,
 		Items:      items,
 	}, nil
@@ -347,6 +348,74 @@ func (os *orderService) DetailOrder(ctx context.Context, request *order.DetailOr
 		Items:            items,
 		Total:            orderEntity.Total,
 		ExpiredAt:        timestamppb.New(*orderEntity.ExpiredAt),
+	}, nil
+}
+
+func (os *orderService) UpdateOrderStatus(ctx context.Context, request *order.UpdateOrderStatusRequest) (*order.UpdateOrderStatusResponse, error) {
+	claims, err := jwtentity.GetClaimsFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	orderEntity, err := os.orderRepository.GetOrderByID(ctx, request.OrderId)
+	if err != nil {
+		return nil, err
+	}
+
+	if orderEntity == nil {
+		return &order.UpdateOrderStatusResponse{
+			Base: utils.NotFoundResponse("order not found"),
+		}, nil
+	}
+
+	if claims.Role != entity.UserRoleAdmin && orderEntity.UserID != claims.Subject {
+		return &order.UpdateOrderStatusResponse{
+			Base: utils.BadRequestResponse("user id not match"),
+		}, nil
+	}
+
+	if request.NewStatusCode == entity.OrderStatusCodePaid {
+		if claims.Role != entity.UserRoleAdmin || orderEntity.OrderStatusCode != entity.OrderStatusCodeUnpaid {
+			return &order.UpdateOrderStatusResponse{
+				Base: utils.BadRequestResponse("update status is not allowed"),
+			}, nil
+		}
+	} else if request.NewStatusCode == entity.OrderStatusCanceled {
+		if orderEntity.OrderStatusCode != entity.OrderStatusCodeUnpaid {
+			return &order.UpdateOrderStatusResponse{
+				Base: utils.BadRequestResponse("update status is not allowed"),
+			}, nil
+		}
+	} else if request.NewStatusCode == entity.OrderStatusCodeShipped {
+		if claims.Role != entity.UserRoleAdmin || orderEntity.OrderStatusCode != entity.OrderStatusCodePaid {
+			return &order.UpdateOrderStatusResponse{
+				Base: utils.BadRequestResponse("update status is not allowed"),
+			}, nil
+		}
+	} else if request.NewStatusCode == entity.OrderStatusCodeDone {
+		if orderEntity.OrderStatusCode != entity.OrderStatusCodeShipped {
+			return &order.UpdateOrderStatusResponse{
+				Base: utils.BadRequestResponse("update status is not allowed"),
+			}, nil
+		}
+	} else {
+		return &order.UpdateOrderStatusResponse{
+			Base: utils.BadRequestResponse("invalid a new status code"),
+		}, nil
+	}
+
+	now := time.Now()
+	orderEntity.OrderStatusCode = request.NewStatusCode
+	orderEntity.UpdatedAt = &now
+	orderEntity.UpdatedBy = &claims.Subject
+
+	err = os.orderRepository.UpdateOrder(ctx, orderEntity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &order.UpdateOrderStatusResponse{
+		Base: utils.SuccessResponse("update order is success"),
 	}, nil
 }
 

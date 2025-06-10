@@ -238,7 +238,10 @@ func (or *orderRepository) GetOrderByID(ctx context.Context, orderID string) (*e
 			created_at,
 			xendit_invoice_url,
 			user_id,
-			expired_at
+			expired_at,
+			xendit_paid_at,
+			xendit_payment_channel,
+			xendit_payment_method
 		FROM
 			"order"
 		WHERE
@@ -267,6 +270,9 @@ func (or *orderRepository) GetOrderByID(ctx context.Context, orderID string) (*e
 		&order.XenditInvoiceUrl,
 		&order.UserID,
 		&order.ExpiredAt,
+		&order.XenditPaidAt,
+		&order.XenditPaymentChannel,
+		&order.XenditPaymentMethod,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -354,24 +360,19 @@ func (or *orderRepository) UpdateOrder(ctx context.Context, order *entity.Order)
 }
 
 func (or *orderRepository) GetListOrderAdminPagination(ctx context.Context, pagination *common.PaginationRequest) ([]*entity.Order, *common.PaginationResponse, error) {
+	// Hitung total data
 	qPgn := `
-		SELECT
-			COUNT (*)
-		FROM
-			"order"
-		WHERE
-			is_deleted = false
+		SELECT COUNT(*)
+		FROM "order"
+		WHERE is_deleted = false
 	`
-
 	row := or.db.QueryRowContext(ctx, qPgn)
 	if row.Err() != nil {
 		return nil, nil, row.Err()
 	}
 
 	var totalCount int
-	err := row.Scan(
-		&totalCount,
-	)
+	err := row.Scan(&totalCount)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -379,6 +380,7 @@ func (or *orderRepository) GetListOrderAdminPagination(ctx context.Context, pagi
 	offset := (pagination.CurrentPage - 1) * pagination.ItemPerPage
 	totalPage := (totalCount + int(pagination.ItemPerPage) - 1) / int(pagination.ItemPerPage)
 
+	// Sorting
 	allowedSort := map[string]string{
 		"number":     "number",
 		"customer":   "user_full_name",
@@ -397,8 +399,8 @@ func (or *orderRepository) GetListOrderAdminPagination(ctx context.Context, pagi
 		}
 	}
 
-	query := fmt.Sprintf(
-		`
+	// Ambil data order
+	query := fmt.Sprintf(`
 		SELECT
 			id,
 			number,
@@ -408,79 +410,68 @@ func (or *orderRepository) GetListOrderAdminPagination(ctx context.Context, pagi
 			created_at,
 			expired_at,
 			xendit_invoice_url
-		FROM
-			"order"
-		WHERE
-			is_deleted = false
+		FROM "order"
+		WHERE is_deleted = false
 		%s
-		LIMIT 
-			$1
-		OFFSET
-			$2
+		LIMIT $1 OFFSET $2
 	`, sort)
 
 	rows, err := or.db.QueryContext(ctx, query, pagination.ItemPerPage, offset)
 	if err != nil {
 		return nil, nil, err
 	}
+	defer rows.Close()
 
 	orders := make([]*entity.Order, 0)
 	ids := make([]string, 0)
 	orderItemsMap := make(map[string][]*entity.OrderItem)
 
-	if len(orders) > 0 {
-		for rows.Next() {
-			var orderEntity entity.Order
-			err = rows.Scan(
-				&orderEntity.ID,
-				&orderEntity.Number,
-				&orderEntity.OrderStatusCode,
-				&orderEntity.Total,
-				&orderEntity.UserFullName,
-				&orderEntity.CreatedAt,
-				&orderEntity.ExpiredAt,
-				&orderEntity.XenditInvoiceUrl,
-			)
-
-			if err != nil {
-				return nil, nil, err
-			}
-
-			orders = append(orders, &orderEntity)
-			ids = append(ids, fmt.Sprintf("'%s'", orderEntity.ID))
-			orderItemsMap[orderEntity.ID] = make([]*entity.OrderItem, 0)
+	// ✅ FIX: proses rows langsung, jangan cek len(orders)
+	for rows.Next() {
+		var orderEntity entity.Order
+		err = rows.Scan(
+			&orderEntity.ID,
+			&orderEntity.Number,
+			&orderEntity.OrderStatusCode,
+			&orderEntity.Total,
+			&orderEntity.UserFullName,
+			&orderEntity.CreatedAt,
+			&orderEntity.ExpiredAt,
+			&orderEntity.XenditInvoiceUrl,
+		)
+		if err != nil {
+			return nil, nil, err
 		}
 
-		idsJoined := strings.Join(ids, ", ")
+		orders = append(orders, &orderEntity)
+		ids = append(ids, fmt.Sprintf("'%s'", orderEntity.ID))
+		orderItemsMap[orderEntity.ID] = make([]*entity.OrderItem, 0)
+	}
 
-		baseOrderItemQuery := fmt.Sprintf(
-			`
+	// Ambil item jika ada orders
+	if len(ids) > 0 {
+		idsJoined := strings.Join(ids, ", ")
+		baseOrderItemQuery := fmt.Sprintf(`
 			SELECT
 				product_id,
 				product_name,
 				product_price,
 				quantity,
 				order_id
-			FROM
-				order_item
-			WHERE
-				is_deleted = false
-			AND
-				order_id
-			IN
-				(%s)
-		`,
-			idsJoined)
+			FROM order_item
+			WHERE is_deleted = false
+			AND order_id IN (%s)
+		`, idsJoined)
 
-		rows, err = or.db.QueryContext(ctx, baseOrderItemQuery)
-
+		itemRows, err := or.db.QueryContext(ctx, baseOrderItemQuery)
 		if err != nil {
 			return nil, nil, err
 		}
+		defer itemRows.Close()
 
-		if rows.Next() {
+		for itemRows.Next() {
 			var item entity.OrderItem
-			err = rows.Scan(
+			err = itemRows.Scan(
 				&item.ProductID,
 				&item.ProductName,
 				&item.ProductPrice,
@@ -490,22 +481,24 @@ func (or *orderRepository) GetListOrderAdminPagination(ctx context.Context, pagi
 			if err != nil {
 				return nil, nil, err
 			}
-
 			orderItemsMap[item.OrderID] = append(orderItemsMap[item.OrderID], &item)
 		}
 
+		// Mapping item ke masing-masing order
 		for i, o := range orders {
 			orders[i].Items = orderItemsMap[o.ID]
 		}
 	}
 
-	var metadata common.PaginationResponse = common.PaginationResponse{
+	// Metadata
+	var metadata = &common.PaginationResponse{
 		CurrentPage:    pagination.CurrentPage,
 		TotalPageCount: int32(totalPage),
 		ItemPerPage:    pagination.ItemPerPage,
 		TotalItemCount: int32(totalCount),
 	}
-	return orders, &metadata, nil
+
+	return orders, metadata, nil
 }
 
 func (or *orderRepository) GetListOrderPagination(ctx context.Context, pagination *common.PaginationRequest, userID string) ([]*entity.Order, *common.PaginationResponse, error) {

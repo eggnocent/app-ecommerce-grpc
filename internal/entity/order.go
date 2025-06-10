@@ -8,6 +8,7 @@ const (
 	OrderStatusCodeShipped = "shipped"
 	OrderStatusCodeDone    = "done"
 	OrderStatusCodeExpired = "expired"
+	OrderStatusCanceled    = "canceled"
 )
 
 type Order struct {
