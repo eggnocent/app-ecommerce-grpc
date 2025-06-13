@@ -629,7 +629,9 @@ func (or *orderRepository) GetListOrderPagination(ctx context.Context, paginatio
 			return nil, nil, err
 		}
 
-		if rows.Next() {
+		defer rows.Close()
+
+		for rows.Next() {
 			var item entity.OrderItem
 			err = rows.Scan(
 				&item.ProductID,

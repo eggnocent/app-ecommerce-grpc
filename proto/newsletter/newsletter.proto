@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+import "common/base-response.proto";
+import "buf/validate/validate.proto";
+
+option go_package = "github/eggnocent/app-grpc-eccomerce/pb/newsletter";
+
+package newsletter;
+
+service NewsletterService {
+    rpc SubscribeNewsLetter(SubscribeNewsLetterRequest) returns (SubscribeNewsLetterResponse);
+}
+
+message SubscribeNewsLetterRequest{
+    string email = 1 [(buf.validate.field).string = {email: true, min_len: 1, max_len: 255}];
+    string full_name = 2[(buf.validate.field).string = {min_len: 1, max_len: 255}];
+}
+
+message SubscribeNewsLetterResponse {
+    common.BaseResponse base = 1;
+}
